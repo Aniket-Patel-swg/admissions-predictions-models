@@ -3,7 +3,7 @@ data "aws_region" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-  region     = data.aws_region.current.name
+  region     = data.aws_region.current.region
   image_uri  = "${aws_ecr_repository.this.repository_url}:${var.image_tag}"
 }
 
@@ -113,7 +113,7 @@ resource "aws_lambda_function_url" "this" {
 
   cors {
     allow_origins = var.cors_allow_origins
-    allow_methods = ["POST", "GET", "OPTIONS"]
+    allow_methods = ["POST", "GET"]
     allow_headers = ["content-type", "authorization"]
     max_age       = 86400
   }
