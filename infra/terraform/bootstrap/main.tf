@@ -121,6 +121,8 @@ data "aws_iam_policy_document" "github_actions" {
     actions = [
       "ecr:GetAuthorizationToken",
       "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
       "ecr:CompleteLayerUpload",
       "ecr:InitiateLayerUpload",
       "ecr:PutImage",
@@ -136,6 +138,8 @@ data "aws_iam_policy_document" "github_actions" {
       "ecr:DeleteRepository",
       "ecr:TagResource",
       "ecr:UntagResource",
+      "ecr:GetRepositoryPolicy",
+      "ecr:SetRepositoryPolicy",
     ]
     resources = ["*"]
   }
