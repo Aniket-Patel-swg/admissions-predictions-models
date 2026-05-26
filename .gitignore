@@ -1,0 +1,141 @@
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments (any depth, any common name)
+.venv/
+.venv-*/
+venv/
+env/
+ENV/
+.python-version
+
+# Test / coverage / type-checker caches
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Matplotlib runtime config (created by mpl when MPLCONFIGDIR is set locally)
+.mplconfig/
+
+# =============================================================================
+# Data / model artifacts
+# -----------------------------------------------------------------------------
+# Keep small reference CSVs that ship with each service (they're inputs the
+# service loads at runtime). Ignore everything that's clearly a *generated*
+# artifact: trained models, large dumps, scratch outputs.
+# =============================================================================
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.ckpt
+*.parquet
+*.feather
+
+# Scratch / temp data drops
+**/data/raw/
+**/data/tmp/
+**/data/_scratch/
+**/outputs/
+**/artifacts/
+
+# =============================================================================
+# Docker
+# =============================================================================
+.dockerignore.local
+docker-compose.override.yml
+
+# =============================================================================
+# Terraform (infra/terraform/**)
+# =============================================================================
+**/.terraform/
+**/.terraform.lock.hcl.bak
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Never commit real tfvars; *.example files ARE committed.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# =============================================================================
+# Secrets / env
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets.yml
+secrets.yaml
+
+# =============================================================================
+# OS junk
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Editors / IDEs
+# =============================================================================
+.idea/
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Logs / misc
+# =============================================================================
+*.log
+logs/
+tmp/
+.tmp/

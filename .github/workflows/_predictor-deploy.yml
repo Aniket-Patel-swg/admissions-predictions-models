@@ -1,0 +1,111 @@
+name: Reusable predictor deploy
+
+# Reusable workflow shared by all three predictor services.
+# Caller workflows pin a service_name (= ECR repo = Lambda name = service folder).
+#
+# Flow: checkout -> AWS OIDC -> ECR login -> docker build/push -> aws lambda update-function-code.
+# Terraform owns infra; this workflow only rolls out new images.
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Service name (folder, ECR repo, Lambda function — all the same)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: false
+        type: string
+        default: ap-south-1
+      platform:
+        description: "Docker target platform (linux/amd64 or linux/arm64)"
+        required: false
+        type: string
+        default: linux/amd64
+    secrets:
+      AWS_ACCOUNT_ID:
+        required: true
+      AWS_DEPLOY_ROLE_ARN:
+        required: true
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ inputs.service_name }}
+      cancel-in-progress: false
+
+    env:
+      SERVICE: ${{ inputs.service_name }}
+      AWS_REGION: ${{ inputs.aws_region }}
+      ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.aws_region }}.amazonaws.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          echo "tag=${GITHUB_RUN_NUMBER}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ env.SERVICE }}
+          file: ./${{ env.SERVICE }}/Dockerfile
+          platforms: ${{ inputs.platform }}
+          provenance: false
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.SERVICE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.SERVICE }}:latest
+          cache-from: type=gha,scope=${{ env.SERVICE }}
+          cache-to: type=gha,mode=max,scope=${{ env.SERVICE }}
+
+      - name: Update Lambda function code
+        run: |
+          set -euo pipefail
+          IMAGE="$ECR_REGISTRY/$SERVICE:${{ steps.tag.outputs.tag }}"
+          aws lambda update-function-code \
+            --function-name "$SERVICE" \
+            --image-uri "$IMAGE" \
+            --region "$AWS_REGION" >/dev/null
+          aws lambda wait function-updated \
+            --function-name "$SERVICE" \
+            --region "$AWS_REGION"
+          aws lambda publish-version \
+            --function-name "$SERVICE" \
+            --description "GH run ${GITHUB_RUN_NUMBER} ${GITHUB_SHA::7}" \
+            --region "$AWS_REGION" >/dev/null
+          echo "Deployed $IMAGE -> $SERVICE"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deploy summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Service | \`$SERVICE\` |"
+            echo "| Image tag | \`${{ steps.tag.outputs.tag }}\` |"
+            echo "| Region | \`$AWS_REGION\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

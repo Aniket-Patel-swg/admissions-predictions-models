@@ -1,0 +1,20 @@
+name: guject-percentile-predictor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "guject-percentile-predictor/**"
+      - ".github/workflows/guject-percentile-predictor.yml"
+      - ".github/workflows/_predictor-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_predictor-deploy.yml
+    with:
+      service_name: guject-percentile-predictor
+      aws_region: ap-south-1
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}

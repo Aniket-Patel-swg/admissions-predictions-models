@@ -1,0 +1,20 @@
+name: college-predictor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "college-predictor/**"
+      - ".github/workflows/college-predictor.yml"
+      - ".github/workflows/_predictor-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_predictor-deploy.yml
+    with:
+      service_name: college-predictor
+      aws_region: ap-south-1
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}

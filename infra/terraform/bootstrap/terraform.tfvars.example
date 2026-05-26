@@ -1,0 +1,7 @@
+aws_region   = "ap-south-1"
+github_owner = "your-github-username-or-org"
+github_repo  = "admissions-predictoins"
+
+# Optional overrides:
+# state_bucket_name     = "admissions-tfstate"
+# state_lock_table_name = "admissions-tfstate-locks"

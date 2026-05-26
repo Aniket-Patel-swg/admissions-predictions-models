@@ -1,0 +1,83 @@
+name: terraform-infra
+
+# Runs Terraform for the predictor stacks.
+# - Pull request touching infra/terraform/** -> `terraform plan` for each stack (review only).
+# - Push to main touching infra/terraform/** -> `terraform plan` then `terraform apply -auto-approve`.
+# Image rollouts are NOT done here; the per-service workflows own those.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-infra.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-infra.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write   # so we can post the plan as a PR comment
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - college-predictor
+          - marks-predictor
+          - guject-percentile-predictor
+    defaults:
+      run:
+        working-directory: infra/terraform/stacks/${{ matrix.stack }}
+
+    env:
+      AWS_REGION: ap-south-1
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+          {
+            echo "### Plan: \`${{ matrix.stack }}\`"
+            echo ""
+            echo '```'
+            tail -n 200 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -input=false -auto-approve tfplan

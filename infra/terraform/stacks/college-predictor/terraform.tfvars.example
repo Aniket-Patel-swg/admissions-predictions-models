@@ -1,0 +1,14 @@
+aws_region   = "ap-south-1"
+image_tag    = "latest"
+memory_size  = 2048
+timeout      = 30
+architecture = "x86_64" # flip to "arm64" for ~20% cost/perf win
+
+# Production hardening (flip when ready):
+# authorization_type             = "AWS_IAM"
+# cors_allow_origins             = ["https://your-frontend.example.com"]
+# reserved_concurrent_executions = 20
+
+env_vars = {
+  # ACPC_CSV = "/var/task/data/acpc_last_admitted_all_years.csv"
+}
