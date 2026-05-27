@@ -10,6 +10,7 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt
 ENV AWS_LWA_PORT=8080 \
     AWS_LWA_INVOKE_MODE=buffered \
     AWS_LWA_READINESS_CHECK_PATH=/health \
+    AWS_LWA_READINESS_CHECK_TIMEOUT=120000 \
     PORT=8080 \
     PYTHONUNBUFFERED=1
 

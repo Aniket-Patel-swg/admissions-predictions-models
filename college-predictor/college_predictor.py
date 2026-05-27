@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
-from contextlib import asynccontextmanager
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "data"))
 from data_cleaning import clean_dataframe, get_equivalent_branches  # noqa: E402
 
 _ENGINE: pd.DataFrame | None = None
+_ENGINE_ERROR: str | None = None
+_engine_ready = threading.Event()
 
 
 def _default_csv_path() -> Path:
@@ -202,19 +204,31 @@ def suggest_colleges(
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _ENGINE
-    csv_path = _default_csv_path()
-    if not csv_path.is_file():
-        raise RuntimeError(f"ACPC CSV not found: {csv_path} (set ACPC_CSV or run extract script first)")
-    df = load_and_clean(str(csv_path))
-    _ENGINE = build_prediction_engine(df)
-    yield
-    _ENGINE = None
+def _load_engine_sync() -> None:
+    global _ENGINE, _ENGINE_ERROR
+    try:
+        csv_path = _default_csv_path()
+        if not csv_path.is_file():
+            raise RuntimeError(
+                f"ACPC CSV not found: {csv_path} (set ACPC_CSV or run extract script first)"
+            )
+        df = load_and_clean(str(csv_path))
+        _ENGINE = build_prediction_engine(df)
+        _ENGINE_ERROR = None
+    except Exception as exc:
+        _ENGINE = None
+        _ENGINE_ERROR = str(exc)
+    finally:
+        _engine_ready.set()
 
 
-app = FastAPI(title="ACPC College Cutoff Predictor", lifespan=lifespan)
+app = FastAPI(title="ACPC College Cutoff Predictor")
+
+
+@app.on_event("startup")
+def startup_event() -> None:
+    # Load synchronously before serving (see guject-percentile-predictor startup comment).
+    _load_engine_sync()
 
 
 class PredictRequest(BaseModel):
@@ -232,10 +246,21 @@ class SuggestRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    ready = _engine_ready.is_set() and _ENGINE is not None and _ENGINE_ERROR is None
+    if _ENGINE_ERROR:
+        status = "error"
+    elif ready:
+        status = "ok"
+    elif _engine_ready.is_set():
+        status = "partial"
+    else:
+        status = "warming"
     return {
-        "status": "ok" if _ENGINE is not None else "starting",
+        "status": status,
+        "ready": ready,
         "engine_rows": int(len(_ENGINE)) if _ENGINE is not None else 0,
         "csv": str(_default_csv_path()),
+        "load_error": _ENGINE_ERROR,
     }
 
 
@@ -251,6 +276,8 @@ def _format_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 @app.post("/predict")
 def predict(req: PredictRequest) -> dict[str, Any]:
+    if _ENGINE_ERROR:
+        raise HTTPException(status_code=503, detail=_ENGINE_ERROR)
     if _ENGINE is None:
         raise HTTPException(status_code=503, detail="Prediction engine not loaded yet")
     out = predict_colleges(req.user_rank, req.user_branch, req.user_category, _ENGINE)
@@ -267,6 +294,8 @@ def predict(req: PredictRequest) -> dict[str, Any]:
 
 @app.post("/suggest")
 def suggest(req: SuggestRequest) -> dict[str, Any]:
+    if _ENGINE_ERROR:
+        raise HTTPException(status_code=503, detail=_ENGINE_ERROR)
     if _ENGINE is None:
         raise HTTPException(status_code=503, detail="Prediction engine not loaded yet")
     out = suggest_colleges(req.user_rank, req.user_category, _ENGINE)

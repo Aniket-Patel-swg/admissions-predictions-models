@@ -155,9 +155,11 @@ def _train_all_boards() -> None:
 
 @app.on_event("startup")
 def startup_event() -> None:
-    # Train in the background so /health responds within Lambda Web Adapter's
-    # default 2s readiness window (four sklearn fits can take 10–30s on cold start).
-    threading.Thread(target=_train_all_boards, name="train-board-models", daemon=True).start()
+    # Train synchronously before serving. Background threads are unreliable on Lambda:
+    # the runtime can freeze the container after a request, leaving training stuck and
+    # /health on "warming" indefinitely even when some boards are already in memory.
+    # Four small sklearn fits finish in seconds; Dockerfile sets AWS_LWA_READINESS_CHECK_TIMEOUT.
+    _train_all_boards()
 
 
 class PredictBody(BaseModel):
@@ -229,9 +231,17 @@ def _predict_one(board_id: str, marks: float) -> dict[str, Any]:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    ready = _models_ready.is_set()
+    ready = _models_ready.is_set() and not _training_error and bool(models)
+    if _training_error:
+        status = "error"
+    elif ready:
+        status = "ok"
+    elif models:
+        status = "partial"
+    else:
+        status = "warming"
     return {
-        "status": "ok" if ready and not _training_error else "warming",
+        "status": status,
         "ready": ready,
         "boards_trained": list(models.keys()),
         "training_error": _training_error,
