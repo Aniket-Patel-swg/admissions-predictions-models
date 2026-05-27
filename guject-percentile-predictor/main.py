@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any,Optional
 
 import numpy as np
 import pandas as pd
@@ -145,7 +145,7 @@ def startup_event() -> None:
 
 
 class PredictBody(BaseModel):
-    """Each board in `boards` must supply the matching `*_marks` field (e.g. gujcet → gujcet_marks or guject_marks)."""
+    """Each board in `boards` must supply the matching `*_marks` field."""
 
     boards: list[str] = Field(
         ...,
@@ -153,19 +153,34 @@ class PredictBody(BaseModel):
         max_length=20,
         description="Board ids to run (e.g. gujcet, cbse, gseb, isce)",
     )
-    gujcet_marks: float | None = Field(
+
+    gujcet_marks: Optional[float] = Field(
         None,
         validation_alias=AliasChoices("gujcet_marks", "guject_marks"),
-        description="Required when `gujcet` is in `boards` (accepts JSON key gujcet_marks or guject_marks)",
+        description="Required when `gujcet` is in `boards` "
+        "(accepts JSON key gujcet_marks or guject_marks)",
     )
-    cbse_marks: float | None = Field(None, description="Required when `cbse` is in `boards`")
-    gseb_marks: float | None = Field(None, description="Required when `gseb` is in `boards`")
-    isce_marks: float | None = Field(None, description="Required when `isce` is in `boards`")
+
+    cbse_marks: Optional[float] = Field(
+        None,
+        description="Required when `cbse` is in `boards`",
+    )
+
+    gseb_marks: Optional[float] = Field(
+        None,
+        description="Required when `gseb` is in `boards`",
+    )
+
+    isce_marks: Optional[float] = Field(
+        None,
+        description="Required when `isce` is in `boards`",
+    )
 
     @model_validator(mode="after")
-    def marks_required_for_listed_boards(self) -> PredictBody:
+    def marks_required_for_listed_boards(self) -> "PredictBody":
         seen: list[str] = []
         seen_set: set[str] = set()
+
         for b in self.boards:
             if b not in seen_set:
                 seen_set.add(b)
@@ -184,8 +199,8 @@ class PredictBody(BaseModel):
                 raise ValueError(
                     f"`{field_name}` is required when board '{b}' is listed in `boards`"
                 )
-        return self
 
+        return self
 
 def _predict_one(board_id: str, marks: float) -> dict[str, Any]:
     if board_id not in models or board_id not in polys:
