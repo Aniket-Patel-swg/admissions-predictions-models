@@ -2,7 +2,7 @@ name: guject-percentile-predictor
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - "guject-percentile-predictor/**"
       - ".github/workflows/guject-percentile-predictor.yml"

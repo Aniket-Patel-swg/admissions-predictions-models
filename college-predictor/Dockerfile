@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY college_predictor.py .
 COPY data ./data
+RUN test -f data/acpc_last_admitted_all_years.csv
 
 EXPOSE 8080
 

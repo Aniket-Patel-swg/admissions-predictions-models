@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
-import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +22,6 @@ from data_cleaning import clean_dataframe, get_equivalent_branches  # noqa: E402
 
 _ENGINE: pd.DataFrame | None = None
 _ENGINE_ERROR: str | None = None
-_engine_ready = threading.Event()
 
 
 def _default_csv_path() -> Path:
@@ -204,7 +203,9 @@ def suggest_colleges(
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-def _load_engine_sync() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Same startup pattern as marks-predictor (proven on Lambda + Web Adapter)."""
     global _ENGINE, _ENGINE_ERROR
     try:
         csv_path = _default_csv_path()
@@ -218,17 +219,12 @@ def _load_engine_sync() -> None:
     except Exception as exc:
         _ENGINE = None
         _ENGINE_ERROR = str(exc)
-    finally:
-        _engine_ready.set()
+    yield
+    _ENGINE = None
+    _ENGINE_ERROR = None
 
 
-app = FastAPI(title="ACPC College Cutoff Predictor")
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    # Load synchronously before serving (see guject-percentile-predictor startup comment).
-    _load_engine_sync()
+app = FastAPI(title="ACPC College Cutoff Predictor", lifespan=lifespan)
 
 
 class PredictRequest(BaseModel):
@@ -246,18 +242,14 @@ class SuggestRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    ready = _engine_ready.is_set() and _ENGINE is not None and _ENGINE_ERROR is None
     if _ENGINE_ERROR:
         status = "error"
-    elif ready:
+    elif _ENGINE is not None:
         status = "ok"
-    elif _engine_ready.is_set():
-        status = "partial"
     else:
-        status = "warming"
+        status = "starting"
     return {
         "status": status,
-        "ready": ready,
         "engine_rows": int(len(_ENGINE)) if _ENGINE is not None else 0,
         "csv": str(_default_csv_path()),
         "load_error": _ENGINE_ERROR,

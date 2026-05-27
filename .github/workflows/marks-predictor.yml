@@ -2,7 +2,7 @@ name: marks-predictor
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - "marks-predictor/**"
       - ".github/workflows/marks-predictor.yml"
