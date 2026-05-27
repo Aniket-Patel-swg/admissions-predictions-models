@@ -2,7 +2,8 @@ aws_region   = "ap-south-1"
 image_tag    = "latest"
 memory_size  = 2048
 timeout      = 30
-architecture = "arm64"
+# Must match the Docker platform in college-predictor.yml (currently linux/amd64 → x86_64).
+architecture = "x86_64"
 
 # Production hardening (flip when ready):
 # authorization_type             = "AWS_IAM"

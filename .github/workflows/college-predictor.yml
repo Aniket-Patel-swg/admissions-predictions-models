@@ -19,6 +19,9 @@ jobs:
     with:
       service_name: college-predictor
       aws_region: ap-south-1
+      # College Lambda was provisioned as x86_64; arm64 images cause immediate 502.
+      # After `terraform apply` with architecture = "arm64", switch this to linux/arm64.
+      platform: linux/amd64
     secrets:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
