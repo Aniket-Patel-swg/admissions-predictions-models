@@ -1,8 +1,8 @@
-# Build from repository root (parent of this folder):
-#   docker build -f guject-percentile-predictor/Dockerfile -t guject-percentile-predictor .
+# Build from this folder (same as college-predictor / marks-predictor):
+#   docker build -t guject-percentile-predictor .
 #
-# Expects: guject-percentile-predictor/data/ (GUJCET CSVs), cbse/, gseb/, isce/ at repo root.
-# Deploys as an AWS Lambda container image (Function URL or API Gateway).
+# Board CSVs live under data/ (gujcet, cbse, gseb, isce).
+# Deploys as an AWS Lambda container image (Function URL).
 # Uses AWS Lambda Web Adapter so the FastAPI/uvicorn app runs unchanged.
 FROM python:3.9-slim
 
@@ -16,14 +16,11 @@ ENV AWS_LWA_PORT=8080 \
 
 WORKDIR /var/task
 
-COPY guject-percentile-predictor/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY guject-percentile-predictor/main.py .
-COPY guject-percentile-predictor/data ./data
-COPY cbse ./cbse
-COPY gseb ./gseb
-COPY isce ./isce
+COPY main.py .
+COPY data ./data
 
 EXPOSE 8080
 
