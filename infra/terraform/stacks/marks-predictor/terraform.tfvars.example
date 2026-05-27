@@ -2,7 +2,7 @@ aws_region   = "ap-south-1"
 image_tag    = "latest"
 memory_size  = 2048
 timeout      = 30
-architecture = "x86_64" # flip to "arm64" for ~20% cost/perf win
+architecture = "arm64"
 
 # Production hardening (flip when ready):
 # authorization_type             = "AWS_IAM"

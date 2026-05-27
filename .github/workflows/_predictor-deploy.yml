@@ -22,7 +22,7 @@ on:
         description: "Docker target platform (linux/amd64 or linux/arm64)"
         required: false
         type: string
-        default: linux/amd64
+        default: linux/arm64
     secrets:
       AWS_ACCOUNT_ID:
         required: true

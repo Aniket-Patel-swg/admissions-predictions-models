@@ -95,7 +95,7 @@ After bootstrap, GitHub Actions owns image rollouts. The Terraform workflow re-a
 | `image_tag`                       | `latest`     | First-time bootstrap; CI overrides on subsequent deploys                    |
 | `memory_size`                     | `2048`       | Tune after profiling. Increase if CSV load OOMs                             |
 | `timeout`                         | `30`         | Function URL hard ceiling — don't raise                                     |
-| `architecture`                    | `x86_64`     | Flip to `"arm64"` for ~20% cheaper + faster (also flip the workflow's `platform`) |
+| `architecture`                    | `arm64`      | Use `"x86_64"` only if you need amd64-only native deps (also set workflow `platform` to `linux/amd64`) |
 | `authorization_type`              | `NONE`       | Flip to `"AWS_IAM"` in production (see § Locking it down)                   |
 | `cors_allow_origins`              | `["*"]`      | Restrict to actual frontend origin, or drop entirely if server-to-server    |
 | `reserved_concurrent_executions`  | `-1`         | Set to `20` (or similar) to cap blast radius + cost                         |

@@ -24,7 +24,7 @@ variable "timeout" {
 variable "architecture" {
   description = "Lambda CPU architecture. arm64 is ~20% cheaper and works for pandas/sklearn images."
   type        = string
-  default     = "x86_64"
+  default     = "arm64"
   validation {
     condition     = contains(["x86_64", "arm64"], var.architecture)
     error_message = "architecture must be either 'x86_64' or 'arm64'."

@@ -15,7 +15,7 @@ variable "timeout" {
 
 variable "architecture" {
   type    = string
-  default = "x86_64"
+  default = "arm64"
 }
 
 variable "authorization_type" {
