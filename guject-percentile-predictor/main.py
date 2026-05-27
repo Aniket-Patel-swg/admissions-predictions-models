@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
-from typing import Any,Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -67,6 +68,8 @@ BOARD_DATA: dict[str, list[Path]] = {
 OPTIMAL_DEGREE = 6
 polys: dict[str, PolynomialFeatures] = {}
 models: dict[str, LinearRegression] = {}
+_models_ready = threading.Event()
+_training_error: str | None = None
 
 
 def _session_row_weight(session_idx: int, n_sessions: int) -> float:
@@ -93,55 +96,68 @@ def _existing_paths(paths: list[Path]) -> list[Path]:
     return out
 
 
+def _train_all_boards() -> None:
+    global _training_error
+    try:
+        for board, path_list in BOARD_DATA.items():
+            paths = _existing_paths(path_list)
+            n_sess = len(paths)
+            data_frames: list[pd.DataFrame] = []
+            weight_chunks: list[np.ndarray] = []
+            for session_idx, p in enumerate(paths):
+                try:
+                    df = pd.read_csv(p).dropna()
+                except Exception as e:
+                    print(f"Skipping {p}: {e}")
+                    continue
+                if len(df) == 0:
+                    continue
+                w = _session_row_weight(session_idx, n_sess)
+                data_frames.append(df)
+                weight_chunks.append(np.full(len(df), w, dtype=float))
+
+            if not data_frames:
+                print(f"No data for board {board}; skipping")
+                continue
+
+            try:
+                combined_df = pd.concat(data_frames, ignore_index=True)
+                sample_weight = np.concatenate(weight_chunks)
+                if len(sample_weight) != len(combined_df):
+                    raise RuntimeError("sample_weight length mismatch after concat")
+
+                valid = combined_df[["Marks", "Percentile"]].notna().all(axis=1)
+                combined_df = combined_df.loc[valid].reset_index(drop=True)
+                sample_weight = sample_weight[valid.to_numpy()]
+                X = combined_df[["Marks"]].values.astype(float)
+                y = combined_df["Percentile"].values.astype(float)
+
+                poly = PolynomialFeatures(degree=OPTIMAL_DEGREE)
+                poly.fit(np.zeros((1, 1), dtype=float))
+                X_poly = poly.transform(X)
+                model = LinearRegression()
+                model.fit(X_poly, y, sample_weight=sample_weight)
+
+                polys[board] = poly
+                models[board] = model
+                print(
+                    f"Combined model trained for {board} using {len(combined_df)} rows "
+                    f"(weights old={TRAIN_WEIGHT_OLDEST_SESSIONS} recent={TRAIN_WEIGHT_RECENT_SESSIONS})."
+                )
+            except Exception as e:
+                print(f"Failed to train model for board {board}: {e}")
+    except Exception as e:
+        _training_error = str(e)
+        print(f"Model training failed: {e}")
+    finally:
+        _models_ready.set()
+
+
 @app.on_event("startup")
 def startup_event() -> None:
-    for board, path_list in BOARD_DATA.items():
-        paths = _existing_paths(path_list)
-        n_sess = len(paths)
-        data_frames: list[pd.DataFrame] = []
-        weight_chunks: list[np.ndarray] = []
-        for session_idx, p in enumerate(paths):
-            try:
-                df = pd.read_csv(p).dropna()
-            except Exception as e:
-                print(f"Skipping {p}: {e}")
-                continue
-            if len(df) == 0:
-                continue
-            w = _session_row_weight(session_idx, n_sess)
-            data_frames.append(df)
-            weight_chunks.append(np.full(len(df), w, dtype=float))
-
-        if not data_frames:
-            print(f"No data for board {board}; skipping")
-            continue
-
-        try:
-            combined_df = pd.concat(data_frames, ignore_index=True)
-            sample_weight = np.concatenate(weight_chunks)
-            if len(sample_weight) != len(combined_df):
-                raise RuntimeError("sample_weight length mismatch after concat")
-
-            valid = combined_df[["Marks", "Percentile"]].notna().all(axis=1)
-            combined_df = combined_df.loc[valid].reset_index(drop=True)
-            sample_weight = sample_weight[valid.to_numpy()]
-            X = combined_df[["Marks"]].values.astype(float)
-            y = combined_df["Percentile"].values.astype(float)
-
-            poly = PolynomialFeatures(degree=OPTIMAL_DEGREE)
-            poly.fit(np.zeros((1, 1), dtype=float))
-            X_poly = poly.transform(X)
-            model = LinearRegression()
-            model.fit(X_poly, y, sample_weight=sample_weight)
-
-            polys[board] = poly
-            models[board] = model
-            print(
-                f"Combined model trained for {board} using {len(combined_df)} rows "
-                f"(weights old={TRAIN_WEIGHT_OLDEST_SESSIONS} recent={TRAIN_WEIGHT_RECENT_SESSIONS})."
-            )
-        except Exception as e:
-            print(f"Failed to train model for board {board}: {e}")
+    # Train in the background so /health responds within Lambda Web Adapter's
+    # default 2s readiness window (four sklearn fits can take 10–30s on cold start).
+    threading.Thread(target=_train_all_boards, name="train-board-models", daemon=True).start()
 
 
 class PredictBody(BaseModel):
@@ -213,9 +229,12 @@ def _predict_one(board_id: str, marks: float) -> dict[str, Any]:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    ready = _models_ready.is_set()
     return {
-        "status": "ok",
+        "status": "ok" if ready and not _training_error else "warming",
+        "ready": ready,
         "boards_trained": list(models.keys()),
+        "training_error": _training_error,
         "rate_limit": RATE_LIMIT,
         "training_sample_weights": {
             "oldest_sessions": TRAIN_WEIGHT_OLDEST_SESSIONS,
@@ -228,6 +247,10 @@ def health() -> dict[str, Any]:
 @limiter.limit(RATE_LIMIT)
 def predict_multi(request: Request, body: PredictBody) -> dict[str, Any]:
     """Predict using per-board marks fields (`gujcet_marks`, `cbse_marks`, …) matching `boards`."""
+    if not _models_ready.is_set():
+        raise HTTPException(status_code=503, detail="Models still loading; retry in a few seconds")
+    if _training_error:
+        raise HTTPException(status_code=500, detail=f"Model training failed: {_training_error}")
     seen: set[str] = set()
     board_order: list[str] = []
     for b in body.boards:
